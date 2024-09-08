@@ -9,12 +9,20 @@ import {VRFV2PlusClient} from "@chainlink/contracts@1.2.0/src/v0.8/vrf/dev/libra
 
 
 contract Lottery is VRFConsumerBaseV2Plus{
-    
-    // Original Lottery Setup Params
+
+    // LOTTERY VARIABLES
     address payable[] public players;
     uint public lotteryId;
     mapping (uint => address payable) public lotteryHistory;
 
+
+
+    event RequestSent(uint256 requestId, uint32 numWords);
+    event RequestFulfilled(uint256 requestId, uint256[] randomWords);
+    
+    /*
+    Request stattus structure stores the information we recieve from chainlink
+    */
     struct RequestStatus {
         bool fulfilled; // wether the request has been fulfilled
         bool exists; // wether a requestID exists
@@ -62,7 +70,7 @@ contract Lottery is VRFConsumerBaseV2Plus{
         });
         requestIds.push(requestId);
         lastRequestId = requestId;
-        // emit RequestSent(requestId, numWords);
+        emit RequestSent(requestId, numWords);
         return requestId;
     }
 
@@ -73,49 +81,64 @@ contract Lottery is VRFConsumerBaseV2Plus{
         require(s_requests[_requestId].exists, "request not found");
         s_requests[_requestId].fulfilled = true;
         s_requests[_requestId].randomWords = _randomWords;
-        // emit RequestFulfilled(_requestId, _randomWords);
+        emit RequestFulfilled(_requestId, _randomWords);
     }
 
     function getRequestStatus(
         uint256 _requestId
-    ) external view returns (bool fulfilled, uint256[] memory randomWords) {
+    ) internal view returns (bool fulfilled, uint256[] memory randomWords) {
         require(s_requests[_requestId].exists, "request not found");
         RequestStatus memory request = s_requests[_requestId];
         return (request.fulfilled, request.randomWords);
     }
 
-    function getWinnerByLottery(uint lottery) public view returns (address payable) {
-        return lotteryHistory[lottery];
+    function getWinningNumbers(uint256 _requestId) external view  onlyowner returns (uint256[] memory winningNumbers) {
+        (bool fulfilled, uint256[] memory randomWords) = getRequestStatus(_requestId);
+        require(fulfilled, "Request not fulfilled");
+
+        uint256 numWinningNumbers = randomWords.length;
+        winningNumbers = new uint256[](numWinningNumbers);
+
+        for (uint256 i = 0; i < numWinningNumbers; i++) {
+            // Map the random numbers to a range between 1 and 49
+            winningNumbers[i] = (randomWords[i] % 49) + 1;
+        }
     }
+    //FUNCTOINALITY WILL BE ADDED BACK ONE BY ONE 
 
-    function getBalance() public view returns (uint) {
-        return address(this).balance;
-    }
 
-    function getPlayers() public view returns (address payable[] memory) {
-        return players;
-    }
+    // function getWinnerByLottery(uint lottery) public view returns (address payable) {
+    //     return lotteryHistory[lottery];
+    // }
 
-    function enter() public payable {
-        require(msg.value > .001 ether);
-        players.push(payable(msg.sender));
-    }
+    // function getBalance() public view returns (uint) {
+    //     return address(this).balance;
+    // }
 
-    function getRandomNumber() public view returns (uint) {
-        return uint(keccak256(abi.encodePacked(msg.sender, block.timestamp)));
-    }
+    // function getPlayers() public view returns (address payable[] memory) {
+    //     return players;
+    // }
 
-    function pickWinner() public onlyowner {
-        uint index = getRandomNumber() % players.length;
-        players[index].transfer(address(this).balance);
+    // function enter() public payable {
+    //     require(msg.value > .001 ether);
+    //     players.push(payable(msg.sender));
+    // }
 
-        lotteryHistory[lotteryId] = players[index];
-        lotteryId++;
+    // function getRandomNumber() public view returns (uint) {
+    //     return uint(keccak256(abi.encodePacked(msg.sender, block.timestamp)));
+    // }
+
+    // function pickWinner() public onlyowner {
+    //     uint index = getRandomNumber() % players.length;
+    //     players[index].transfer(address(this).balance);
+
+    //     lotteryHistory[lotteryId] = players[index];
+    //     lotteryId++;
         
 
-        // reset the state of the contract
-        players = new address payable[](0);
-    }
+    //     // reset the state of the contract
+    //     players = new address payable[](0);
+    // }
 
     modifier onlyowner() {
       require(msg.sender == owner(), "Only the owner can run this function");
